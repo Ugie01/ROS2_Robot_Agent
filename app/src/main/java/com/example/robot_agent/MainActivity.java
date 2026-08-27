@@ -38,8 +38,11 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.tabs.TabLayout;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
+import android.net.Uri;
+import android.provider.Settings;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -51,7 +54,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-public class MainActivity extends AppCompatActivity implements ROS2NativeManager.ROS2DataListener, GeminiAgentManager.GeminiAgentListener {
+public class MainActivity extends AppCompatActivity implements ROS2NativeManager.ROS2DataListener, OllamaAgentManager.OllamaAgentListener {
 
     private static final String TAG = "MainActivity";
     private static final int PERMISSION_REQ_CODE = 1001;
@@ -94,7 +97,7 @@ public class MainActivity extends AppCompatActivity implements ROS2NativeManager
     // Controllers & Engines
     private ROS2NativeManager ros2Manager;
     private PoiManager poiManager;
-    private GeminiAgentManager geminiAgentManager;
+    private OllamaAgentManager aiAgentManager;
     private TextToSpeech tts;
     private SpeechRecognizer speechRecognizer;
 
@@ -129,7 +132,7 @@ public class MainActivity extends AppCompatActivity implements ROS2NativeManager
         poiManager = new PoiManager();
         poiManager.loadFromFile(this);
 
-        geminiAgentManager = new GeminiAgentManager(BuildConfig.GEMINI_API_KEY, poiManager, this);
+        aiAgentManager = new OllamaAgentManager(poiManager, this);
         ros2Manager = new ROS2NativeManager(this, this);
 
         initViews();
@@ -192,6 +195,19 @@ public class MainActivity extends AppCompatActivity implements ROS2NativeManager
     }
 
     private void checkPermissionsAndStartWakeWord() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            new AlertDialog.Builder(this)
+                    .setTitle("권한 설정 안내")
+                    .setMessage("'헤이 터틀' 음성 호출 시 화면을 즉시 띄우기 위해 [다른 앱 위에 표시] 권한이 필요합니다.")
+                    .setPositiveButton("설정 이동", (dialog, which) -> {
+                        Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:" + getPackageName()));
+                        startActivity(intent);
+                    })
+                    .setNegativeButton("나중에", null)
+                    .show();
+        }
+
         List<String> neededPermissions = new ArrayList<>();
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             neededPermissions.add(Manifest.permission.RECORD_AUDIO);
@@ -242,6 +258,17 @@ public class MainActivity extends AppCompatActivity implements ROS2NativeManager
         }
     }
 
+    private void resumeWakeWordService() {
+        Intent intent = new Intent(this, WakeWordService.class);
+        intent.setAction(WakeWordService.ACTION_RESUME);
+        startService(intent);
+    }
+
+    private void pauseWakeWordService() {
+        Intent intent = new Intent(this, WakeWordService.class);
+        intent.setAction(WakeWordService.ACTION_PAUSE); // 새로 만든 PAUSE 액션
+        startService(intent);
+    }
     private void initSpeechEngines() {
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
@@ -269,6 +296,7 @@ public class MainActivity extends AppCompatActivity implements ROS2NativeManager
                 public void onError(int error) {
                     Log.e(TAG, "STT 에러 코드: " + error);
                     Toast.makeText(MainActivity.this, "음성을 다시 말씀해 주세요.", Toast.LENGTH_SHORT).show();
+                    resumeWakeWordService(); // 에러 발생 시 마이크 반환
                 }
 
                 @Override
@@ -277,8 +305,9 @@ public class MainActivity extends AppCompatActivity implements ROS2NativeManager
                     if (matches != null && !matches.isEmpty()) {
                         String voiceText = matches.get(0);
                         appendChatLog("👤 [사용자 (음성)] " + voiceText);
-                        geminiAgentManager.sendUserMessage(voiceText);
+                        aiAgentManager.sendUserMessage(voiceText);
                     }
+                    resumeWakeWordService(); // 성공 시 마이크 반환
                 }
 
                 @Override public void onPartialResults(Bundle partialResults) {}
@@ -294,22 +323,30 @@ public class MainActivity extends AppCompatActivity implements ROS2NativeManager
     }
 
     private void startSpeechRecognition() {
-        runOnUiThread(() -> {
-            if (speechRecognizer != null) {
-                Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR");
-                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ko-KR");
-                intent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, getPackageName());
-                try {
-                    speechRecognizer.startListening(intent);
-                } catch (Exception e) {
-                    Toast.makeText(this, "STT 시작 실패: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        // 🛑 구글 STT를 켜기 전에 백그라운드의 Vosk 마이크를 뺏어서 멈춥니다.
+        pauseWakeWordService();
+
+        // 🛑 마이크 하드웨어 권한이 넘어올 시간을 0.3초(300ms) 줍니다.
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            runOnUiThread(() -> {
+                if (speechRecognizer != null) {
+                    Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+                    intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+                    intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR");
+                    intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ko-KR");
+                    intent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, getPackageName());
+                    try {
+                        speechRecognizer.startListening(intent);
+                    } catch (Exception e) {
+                        Toast.makeText(this, "STT 시작 실패: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                        resumeWakeWordService(); // 실패하면 다시 Vosk 살려줌
+                    }
+                } else {
+                    Toast.makeText(this, "STT 음성 인식을 지원하지 않는 기기입니다.", Toast.LENGTH_SHORT).show();
+                    resumeWakeWordService();
                 }
-            } else {
-                Toast.makeText(this, "STT 음성 인식을 지원하지 않는 기기입니다.", Toast.LENGTH_SHORT).show();
-            }
-        });
+            });
+        }, 300);
     }
 
     private void setupGlobalCrashGuard() {
@@ -353,7 +390,6 @@ public class MainActivity extends AppCompatActivity implements ROS2NativeManager
         qosAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spnGlobalQos.setAdapter(qosAdapter);
 
-        // Tab 1: 주행 & 센서
         sbMaxSpeed = findViewById(R.id.sbMaxSpeed);
         tvMaxSpeedLabel = findViewById(R.id.tvMaxSpeedLabel);
         spnCmdVelType = findViewById(R.id.spnCmdVelType);
@@ -362,7 +398,6 @@ public class MainActivity extends AppCompatActivity implements ROS2NativeManager
         tvVelocity = findViewById(R.id.tvVelocity);
         btnEmergencyStop = findViewById(R.id.btnEmergencyStop);
 
-        // Tab 2: Gemini AI 에이전트 & POI 맵
         mapViewAi = findViewById(R.id.mapViewAi);
         tvChatLog = findViewById(R.id.tvChatLog);
         svChatLog = findViewById(R.id.svChatLog);
@@ -482,7 +517,6 @@ public class MainActivity extends AppCompatActivity implements ROS2NativeManager
 
                 @Override
                 public void onInitialPoseSelected(float worldX, float worldY, float yaw) {
-                    // [2D Pose Estimate] 로봇 위치 및 방향 추정 전송
                     ros2Manager.publishInitialPose(worldX, worldY, yaw);
                     mapViewAi.clearAllMarkers();
                     Toast.makeText(MainActivity.this, String.format(Locale.getDefault(), "위치 추정(2D Pose) 적용: (%.2f, %.2f, %.0f°)", worldX, worldY, Math.toDegrees(yaw)), Toast.LENGTH_SHORT).show();
@@ -537,22 +571,19 @@ public class MainActivity extends AppCompatActivity implements ROS2NativeManager
             if (!text.isEmpty()) {
                 etUserChat.setText("");
                 appendChatLog("👤 [사용자] " + text);
-                geminiAgentManager.sendUserMessage(text);
+                aiAgentManager.sendUserMessage(text);
             }
         });
 
         btnVoiceStt.setOnClickListener(v -> startSpeechRecognition());
 
         btnClearChat.setOnClickListener(v -> {
-            geminiAgentManager.clearHistory();
+            aiAgentManager.clearHistory();
             tvChatLog.setText("[대화 기록이 초기화되었습니다.]\n");
             speakText("대화 기록이 초기화되었습니다.");
         });
     }
 
-    /**
-     * [복원]: Inflation Radius / Cost Scaling Factor / 속도 파라미터 튜닝 다이얼로그
-     */
     private void showParamTuningDialog() {
         String[] paramList = new String[]{
                 "/local_costmap/local_costmap.inflation_layer.inflation_radius",
@@ -597,7 +628,6 @@ public class MainActivity extends AppCompatActivity implements ROS2NativeManager
                     if (!newVal.isEmpty()) {
                         currentParamValues.put(selectedFullKey, newVal);
 
-                        // Node와 Param 분리
                         int lastDot = selectedFullKey.lastIndexOf('.');
                         String node = selectedFullKey.substring(0, lastDot);
                         String param = selectedFullKey.substring(lastDot + 1);
@@ -646,7 +676,6 @@ public class MainActivity extends AppCompatActivity implements ROS2NativeManager
         svChatLog.post(() -> svChatLog.fullScroll(View.FOCUS_DOWN));
     }
 
-    // GeminiAgentListener 구현
     @Override
     public void onResponse(String textResponse) {
         appendChatLog("🤖 [터틀] " + textResponse);
@@ -656,37 +685,64 @@ public class MainActivity extends AppCompatActivity implements ROS2NativeManager
     @Override
     public void onFunctionCall(String functionName, JSONObject arguments) {
         if ("navigate_to_poi".equals(functionName)) {
-            String targetName = arguments.optString("target_name", "");
-            PoiManager.PoiItem poi = poiManager.getPoi(targetName);
-
+            JSONArray targetNames = arguments.optJSONArray("target_names");
             JSONObject resultJson = new JSONObject();
-            try {
-                if (poi != null) {
-                    ros2Manager.publishGoalPose(poi.x, poi.y, poi.yaw);
-                    String feedback = targetName + "(으)로 이동을 시작합니다.";
-                    appendChatLog("⚙️ [에이전트 실행] " + feedback + " (X:" + String.format(Locale.getDefault(), "%.2f", poi.x) + ", Y:" + String.format(Locale.getDefault(), "%.2f", poi.y) + ")");
-                    speakText(feedback);
 
-                    resultJson.put("status", "success");
-                    resultJson.put("message", feedback);
+            try {
+                if (targetNames != null && targetNames.length() > 0) {
+                    List<String> validTargets = new ArrayList<>();
+                    List<String> invalidTargets = new ArrayList<>();
+
+                    for (int i = 0; i < targetNames.length(); i++) {
+                        String targetName = targetNames.getString(i);
+                        PoiManager.PoiItem poi = poiManager.getPoi(targetName);
+
+                        if (poi != null) {
+                            validTargets.add(targetName);
+                            if (validTargets.size() == 1) {
+                                ros2Manager.publishGoalPose(poi.x, poi.y, poi.yaw);
+                            }
+                        } else {
+                            invalidTargets.add(targetName);
+                        }
+                    }
+
+                    if (!validTargets.isEmpty()) {
+                        String feedback = String.join(", ", validTargets) + "(으)로 이동을 시작합니다.";
+                        if (!invalidTargets.isEmpty()) {
+                            feedback += " (미등록 장소 제외: " + String.join(", ", invalidTargets) + ")";
+                        }
+                        appendChatLog("⚙️ [에이전트 실행] " + feedback);
+                        speakText(feedback);
+
+                        resultJson.put("status", "success");
+                        resultJson.put("message", feedback);
+                    } else {
+                        String feedback = "해당 장소(" + String.join(", ", invalidTargets) + ")는 지도에 설정되어 있지 않습니다. 먼저 맵에서 POI를 설정해 주세요.";
+                        appendChatLog("⚠️ [에이전트 안내] " + feedback);
+                        speakText(feedback);
+
+                        resultJson.put("status", "failed");
+                        resultJson.put("message", feedback);
+                    }
                 } else {
-                    String feedback = "등록되지 않은 목적지입니다: " + targetName;
-                    appendChatLog("⚠️ [에이전트 오류] " + feedback);
+                    String feedback = "목적지가 설정되어 있지 않습니다. 먼저 맵에서 POI를 등록해 주세요.";
+                    appendChatLog("⚠️ [에이전트 안내] " + feedback);
                     speakText(feedback);
 
                     resultJson.put("status", "failed");
                     resultJson.put("message", feedback);
                 }
             } catch (Exception e) {
-                Log.e(TAG, "함수 응답 JSON 생성 오류", e);
+                Log.e(TAG, "함수 응답 처리 오류", e);
             }
 
-            geminiAgentManager.sendFunctionResult(functionName, resultJson);
+            aiAgentManager.sendFunctionResult(functionName, resultJson);
         }
     }
 
     @Override
-    public void onGeminiError(String errorMessage) {
+    public void onError(String errorMessage) {
         runOnUiThread(() -> {
             appendChatLog("❌ [에이전트 오류] " + errorMessage);
             Toast.makeText(this, "Gemini 에러: " + errorMessage, Toast.LENGTH_SHORT).show();
@@ -782,7 +838,6 @@ public class MainActivity extends AppCompatActivity implements ROS2NativeManager
         runOnUiThread(() -> {
             if (!ros2Manager.isRunning()) return;
 
-            // AMCL 포즈(지도 기준 위치)만 맵에 반영하여 odom 좌표 충돌 방지
             if (isAmcl) {
                 curRobotX = worldX;
                 curRobotY = worldY;
@@ -858,8 +913,8 @@ public class MainActivity extends AppCompatActivity implements ROS2NativeManager
         if (speechRecognizer != null) {
             speechRecognizer.destroy();
         }
-        if (geminiAgentManager != null) {
-            geminiAgentManager.shutdown();
+        if (aiAgentManager != null) {
+            aiAgentManager.shutdown();
         }
         ros2Manager.shutdown();
         clearAllViewsAndState();

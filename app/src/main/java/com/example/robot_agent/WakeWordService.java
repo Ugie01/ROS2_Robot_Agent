@@ -5,7 +5,6 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
@@ -15,42 +14,65 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
-import ai.picovoice.porcupine.Porcupine;
-import ai.picovoice.porcupine.PorcupineManager;
-import ai.picovoice.porcupine.PorcupineManagerCallback;
+import org.vosk.Model;
+import org.vosk.Recognizer;
+import org.vosk.android.RecognitionListener;
+import org.vosk.android.SpeechService;
+import org.vosk.android.StorageService;
 
-public class WakeWordService extends Service {
+import java.io.IOException;
+import org.json.JSONObject;
+
+public class WakeWordService extends Service implements RecognitionListener {
     private static final String TAG = "WakeWordService";
     private static final String CHANNEL_ID = "wake_word_service_channel";
     private static final int NOTIFICATION_ID = 2001;
 
     public static final String ACTION_START = "ACTION_START_WAKE_WORD";
     public static final String ACTION_STOP = "ACTION_STOP_WAKE_WORD";
+    public static final String ACTION_RESUME = "ACTION_RESUME_WAKE_WORD";
+    public static final String ACTION_PAUSE = "ACTION_PAUSE_WAKE_WORD";
     public static final String EXTRA_TRIGGER_STT = "EXTRA_TRIGGER_STT";
 
-    // Picovoice Console 발급 AccessKey
-    private static final String PICOVOICE_ACCESS_KEY = "YOUR_PICOVOICE_ACCESS_KEY";
-
-    private PorcupineManager porcupineManager;
+    private Model model;
+    private Recognizer recognizer; // 🛑 메모리 누수 방지용
+    private SpeechService speechService;
 
     @Override
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
+        initVoskModel();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && ACTION_STOP.equals(intent.getAction())) {
-            stopWakeWordEngine();
-            stopForeground(true);
-            stopSelf();
-            return START_NOT_STICKY;
+        if (intent != null) {
+            if (ACTION_STOP.equals(intent.getAction())) {
+                stopContinuousListening();
+                stopForeground(true);
+                stopSelf();
+                return START_NOT_STICKY;
+            }
+            else if (ACTION_RESUME.equals(intent.getAction())) {
+                // 🛑 구글 STT가 끝났으니, 다시 마이크 하드웨어 소유권 가져오기
+                if (speechService == null && model != null) {
+                    startVoskListening();
+                    Log.d(TAG, "🔥 Vosk 마이크 완전히 새로 켜짐 (하드웨어 권한 획득)");
+                }
+            }
+            else if (ACTION_PAUSE.equals(intent.getAction())) {
+                // 🛑 수동 버튼을 눌렀을 때 마이크 하드웨어를 구글에게 완전히 넘기기
+                if (speechService != null) {
+                    speechService.cancel();
+                    speechService.shutdown();
+                    speechService = null;
+                    Log.d(TAG, "⏸️ Vosk 마이크 완전히 끔 (구글 STT에 양보 완료)");
+                }
+            }
         }
 
         startAsForeground();
-        initPorcupine();
-
         return START_STICKY;
     }
 
@@ -63,7 +85,7 @@ public class WakeWordService extends Service {
 
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("터틀 핫워드 감지 서비스")
-                .setContentText("'헤이 터틀' 음성 명령 대기 중...")
+                .setContentText("'Hey Turtle' 상시 대기 중... (영어 모드)")
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
@@ -83,7 +105,7 @@ public class WakeWordService extends Service {
                     "Turtle WakeWord Service",
                     NotificationManager.IMPORTANCE_LOW
             );
-            channel.setDescription("헤이 터틀 상시 음성 인식 서비스 채널");
+            channel.setDescription("헤이 터틀 상시 음성 감지 채널");
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
                 manager.createNotificationChannel(channel);
@@ -91,29 +113,79 @@ public class WakeWordService extends Service {
         }
     }
 
-    private void initPorcupine() {
-        if (porcupineManager != null) return;
+    private void initVoskModel() {
+        StorageService.unpack(this, "model-en", "model",
+                (model) -> {
+                    this.model = model;
+                    startVoskListening();
+                },
+                (exception) -> Log.e(TAG, "Vosk 모델 로드 실패: " + exception.getMessage(), exception));
+    }
 
+    private void startVoskListening() {
         try {
-            PorcupineManagerCallback callback = keywordIndex -> {
-                Log.d(TAG, "핫워드 감지됨! Index: " + keywordIndex);
-                triggerWakeAction();
-            };
-
-            // 커스텀 키워드 모델(.ppn)이 있을 경우 setKeywordPath 사용, 기본 내장 키워드 PORCUPINE fallback 지원
-            porcupineManager = new PorcupineManager.Builder()
-                    .setAccessKey(PICOVOICE_ACCESS_KEY)
-                    .setKeyword(Porcupine.BuiltInKeyword.PORCUPINE) // 또는 .setKeywordPath("hey_turtle.ppn")
-                    .setSensitivity(0.7f)
-                    .build(getApplicationContext(), callback);
-
-            porcupineManager.start();
-            Log.d(TAG, "Porcupine 핫워드 감지 엔진 시작 완료");
-
-        } catch (Exception e) {
-            Log.e(TAG, "Porcupine 초기화 실패: " + e.getMessage(), e);
+            if (recognizer == null) {
+                recognizer = new Recognizer(model, 16000.0f);
+            }
+            speechService = new SpeechService(recognizer, 16000.0f);
+            speechService.startListening(this);
+            Log.d(TAG, "🔥 Vosk 핫워드 감지 시작됨");
+        } catch (IOException e) {
+            Log.e(TAG, "Vosk SpeechService 시작 실패", e);
         }
     }
+
+    @Override
+    public void onPartialResult(String hypothesis) {
+        try {
+            JSONObject json = new JSONObject(hypothesis);
+            String partialText = json.optString("partial", "");
+            String cleanText = partialText.replace(" ", "").toLowerCase();
+
+            if (cleanText.isEmpty()) return;
+
+            if (cleanText.contains("heyturtle") ||
+                    cleanText.contains("hayturtle") ||
+                    cleanText.contains("heytotal") ||
+                    cleanText.contains("heytaughther") ||
+                    cleanText.contains("heytoldher") ||
+                    cleanText.contains("heyher") ||
+                    cleanText.contains("hey tata") ||
+                    cleanText.contains("hateturtle")) {
+
+                Log.d(TAG, "🔥 영어 호출어 감지 성공! 앱을 띄웁니다.");
+
+                // 🛑 마이크 하드웨어 구글 STT에 완전히 양보
+                if (speechService != null) {
+                    speechService.cancel();
+                    speechService.shutdown();
+                    speechService = null;
+                }
+
+                triggerWakeAction();
+            }
+            else if (cleanText.length() > 30) {
+                resetListening();
+            }
+
+        } catch (Exception e) {
+            Log.e(TAG, "JSON 파싱 에러", e);
+        }
+    }
+
+    @Override
+    public void onResult(String hypothesis) { }
+
+    @Override
+    public void onFinalResult(String hypothesis) { }
+
+    @Override
+    public void onError(Exception exception) {
+        Log.e(TAG, "Vosk 에러 발생", exception);
+    }
+
+    @Override
+    public void onTimeout() { }
 
     private void triggerWakeAction() {
         try {
@@ -122,26 +194,31 @@ public class WakeWordService extends Service {
             intent.putExtra(EXTRA_TRIGGER_STT, true);
             startActivity(intent);
         } catch (Exception e) {
-            Log.e(TAG, "앱 포그라운드 전환 오류", e);
+            Log.e(TAG, "앱 포그라운드 전환 실패", e);
         }
     }
 
-    private void stopWakeWordEngine() {
-        if (porcupineManager != null) {
-            try {
-                porcupineManager.stop();
-                porcupineManager.delete();
-            } catch (Exception e) {
-                Log.e(TAG, "Porcupine 해제 오류", e);
-            }
-            porcupineManager = null;
+    private void resetListening() {
+        if (speechService != null) {
+            speechService.cancel();
+            speechService.startListening(this);
         }
     }
 
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        stopWakeWordEngine();
+    private void stopContinuousListening() {
+        if (speechService != null) {
+            speechService.stop();
+            speechService.shutdown();
+            speechService = null;
+        }
+        if (recognizer != null) {
+            recognizer.close();
+            recognizer = null;
+        }
+        if (model != null) {
+            model.close();
+            model = null;
+        }
     }
 
     @Nullable

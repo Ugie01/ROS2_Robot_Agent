@@ -8,15 +8,18 @@
     android:background="#121212"
     tools:context=".MainActivity">
 
-    <!-- 상단 2단 헤더 -->
-    <LinearLayout
+    <!-- ================= 1. 상단 공통 상태 및 연결 헤더 (2단 분리형) ================= -->
+    <com.google.android.material.card.MaterialCardView
         android:id="@+id/layoutTopHeader"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:background="#1E1E1E"
-        android:orientation="vertical"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="8dp"
+        android:layout_marginHorizontal="8dp"
+        android:layout_marginTop="6dp"
+        app:cardBackgroundColor="#1E1E1E"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="3dp"
+        app:strokeColor="#2E2E2E"
+        app:strokeWidth="1dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
@@ -24,85 +27,115 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:orientation="vertical"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="8dp">
 
-            <TextView
-                android:layout_width="wrap_content"
+            <!-- 1행: 도메인 ID + QoS 선택 + 노드 시작/중지 버튼 -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Domain:"
-                android:textColor="#CCCCCC"
-                android:textSize="12sp" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <EditText
-                android:id="@+id/etDomainId"
-                android:layout_width="45dp"
-                android:layout_height="38dp"
-                android:layout_marginStart="4dp"
-                android:background="#2C2C2C"
-                android:gravity="center"
-                android:inputType="number"
-                android:padding="2dp"
-                android:text="24"
-                android:textColor="#FFFFFF"
-                android:textSize="13sp" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Domain"
+                    android:textColor="#AAAAAA"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
 
-            <Spinner
-                android:id="@+id/spnGlobalQos"
-                android:layout_width="0dp"
-                android:layout_height="38dp"
-                android:layout_marginStart="6dp"
-                android:layout_weight="1"
-                android:background="#2C2C2C" />
+                <EditText
+                    android:id="@+id/etDomainId"
+                    android:layout_width="44dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="4dp"
+                    android:background="@android:drawable/editbox_background_normal"
+                    android:backgroundTint="#2C2C2C"
+                    android:gravity="center"
+                    android:inputType="number"
+                    android:text="24"
+                    android:textColor="#00E5FF"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
 
-            <TextView
-                android:id="@+id/tvBatteryBadge"
-                android:layout_width="wrap_content"
+                <Spinner
+                    android:id="@+id/spnGlobalQos"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:backgroundTint="#888888" />
+
+                <Button
+                    android:id="@+id/btnNodeToggle"
+                    android:layout_width="96dp"
+                    android:layout_height="38dp"
+                    android:layout_marginStart="6dp"
+                    android:backgroundTint="#2E7D32"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:paddingHorizontal="4dp"
+                    android:text="노드 시작"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12.5sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="8dp" />
+            </LinearLayout>
+
+            <!-- 2행: 상태 메시지 + 배터리 잔량 뱃지 -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:text="🔋 --%"
-                android:textColor="#CCCCCC"
-                android:textSize="12sp" />
+                android:layout_marginTop="4dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <Button
-                android:id="@+id/btnNodeToggle"
-                android:layout_width="110dp"
-                android:layout_height="44dp"
-                android:layout_marginStart="8dp"
-                android:backgroundTint="#388E3C"
-                android:elevation="4dp"
-                android:text="노드 시작"
-                android:textColor="#FFFFFF"
-                android:textSize="13sp"
-                android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/tvStatus"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="● DDS 노드 중지됨"
+                    android:textColor="#FF5252"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/tvBatteryBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="#262626"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="2dp"
+                    android:text="🔋 --% (--V)"
+                    android:textColor="#B0BEC5"
+                    android:textSize="11.5sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
         </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
-        <TextView
-            android:id="@+id/tvStatus"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="● 노드 중지됨"
-            android:textColor="#FF5252"
-            android:textSize="12sp"
-            android:textStyle="bold" />
-    </LinearLayout>
-
+    <!-- ================= 2. 탭 네비게이션 ================= -->
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tabLayout"
         android:layout_width="0dp"
-        android:layout_height="42dp"
-        android:background="#1A1A1A"
+        android:layout_height="40dp"
+        android:layout_marginTop="4dp"
+        android:background="#121212"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/layoutTopHeader"
         app:tabGravity="fill"
         app:tabIndicatorColor="#00E5FF"
+        app:tabIndicatorHeight="3dp"
         app:tabMode="fixed"
         app:tabSelectedTextColor="#00E5FF"
-        app:tabTextColor="#888888">
+        app:tabTextAppearance="@android:style/TextAppearance.Small"
+        app:tabTextColor="#777777">
 
         <com.google.android.material.tabs.TabItem
             android:layout_width="wrap_content"
@@ -115,6 +148,7 @@
             android:text="🤖 AI 자율주행 / POI" />
     </com.google.android.material.tabs.TabLayout>
 
+    <!-- ================= 3. 메인 콘텐츠 컨테이너 ================= -->
     <FrameLayout
         android:layout_width="0dp"
         android:layout_height="0dp"
@@ -123,7 +157,7 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tabLayout">
 
-        <!-- ================= Tab 1: 주행 & 센서 ================= -->
+        <!-- ================= [TAB 1: 수동 주행 & 센서] ================= -->
         <LinearLayout
             android:id="@+id/tabDriveSensors"
             android:layout_width="match_parent"
@@ -132,57 +166,88 @@
             android:padding="8dp"
             android:visibility="visible">
 
-            <com.example.robot_agent.LaserScanView
-                android:id="@+id/laserScanView"
+            <!-- 라이다 스캔 뷰 (라운드 카드) -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
-                android:background="#181818" />
+                app:cardBackgroundColor="#181818"
+                app:cardCornerRadius="12dp"
+                app:strokeColor="#2C2C2C"
+                app:strokeWidth="1dp">
 
-            <LinearLayout
+                <com.example.robot_agent.LaserScanView
+                    android:id="@+id/laserScanView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 속도 제어 및 cmd_vel 타입 설정 바 -->
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+                app:cardBackgroundColor="#1E1E1E"
+                app:cardCornerRadius="10dp"
+                app:strokeColor="#2C2C2C"
+                app:strokeWidth="1dp">
 
-                <TextView
-                    android:id="@+id/tvMaxSpeedLabel"
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="최대속도: 0.50 m/s"
-                    android:textColor="#FFFFFF"
-                    android:textSize="12sp" />
+                    android:orientation="vertical"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="6dp">
 
-                <SeekBar
-                    android:id="@+id/sbMaxSpeed"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:max="100"
-                    android:progress="50" />
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
 
-                <Spinner
-                    android:id="@+id/spnCmdVelType"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="#2C2C2C" />
-            </LinearLayout>
+                        <TextView
+                            android:id="@+id/tvMaxSpeedLabel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="최대속도: 0.50 m/s"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
 
-            <TextView
-                android:id="@+id/tvVelocity"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginVertical="4dp"
-                android:gravity="center"
-                android:text="Linear: 0.00 m/s | Angular: 0.00 rad/s (정지)"
-                android:textColor="#00E5FF"
-                android:textSize="12sp" />
+                        <SeekBar
+                            android:id="@+id/sbMaxSpeed"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:max="100"
+                            android:progress="50" />
 
+                        <Spinner
+                            android:id="@+id/spnCmdVelType"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:backgroundTint="#888888" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvVelocity"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:gravity="center"
+                        android:text="Linear: 0.00 m/s | Angular: 0.00 rad/s (정지)"
+                        android:textColor="#00E5FF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 조이스틱 + E-STOP 버튼 영역 -->
             <RelativeLayout
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_weight="1.2">
+                android:layout_weight="1.2"
+                android:layout_marginTop="6dp">
 
                 <com.example.robot_agent.JoystickView
                     android:id="@+id/joystickView"
@@ -191,167 +256,267 @@
 
                 <Button
                     android:id="@+id/btnEmergencyStop"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_width="120dp"
+                    android:layout_height="48dp"
                     android:layout_alignParentEnd="true"
                     android:layout_alignParentBottom="true"
-                    android:layout_margin="8dp"
-                    android:backgroundTint="#FF1744"
-                    android:text="🛑 E-STOP"
+                    android:layout_margin="10dp"
+                    android:backgroundTint="#D50000"
+                    android:elevation="6dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:text="🛑 비상 정지"
                     android:textColor="#FFFFFF"
-                    android:textStyle="bold" />
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="10dp" />
             </RelativeLayout>
         </LinearLayout>
 
-        <!-- ================= Tab 2: Gemini AI 에이전트 & POI ================= -->
-        <LinearLayout
+        <!-- ================= [TAB 2: AI 자율주행 & POI (슬라이딩 시트 적용)] ================= -->
+        <androidx.coordinatorlayout.widget.CoordinatorLayout
             android:id="@+id/tabAiAgent"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:padding="8dp"
             android:visibility="gone">
 
-            <com.example.robot_agent.MapView
-                android:id="@+id/mapViewAi"
+            <!-- 1. 지도 뷰 (전체 화면 차지) -->
+            <RelativeLayout
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1.1"
-                android:background="#181818" />
+                android:layout_height="match_parent">
 
-            <!-- 상단 컨트롤 버튼군 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginVertical="4dp"
-                android:orientation="horizontal">
+                <com.example.robot_agent.MapView
+                    android:id="@+id/mapViewAi"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="#161616" />
 
-                <Button
-                    android:id="@+id/btnModeInitialPose"
-                    android:layout_width="0dp"
-                    android:layout_height="38dp"
-                    android:layout_weight="1"
-                    android:backgroundTint="#00897B"
-                    android:text="위치추정"
-                    android:textColor="#FFFFFF"
-                    android:textSize="10.5sp" />
-
-                <Button
-                    android:id="@+id/btnAddPoiMode"
-                    android:layout_width="0dp"
-                    android:layout_height="38dp"
-                    android:layout_marginStart="3dp"
-                    android:layout_weight="1"
-                    android:backgroundTint="#7B1FA2"
-                    android:text="POI 등록"
-                    android:textColor="#FFFFFF"
-                    android:textSize="10.5sp" />
-
-                <Button
-                    android:id="@+id/btnSavePoi"
-                    android:layout_width="0dp"
-                    android:layout_height="38dp"
-                    android:layout_marginStart="3dp"
-                    android:layout_weight="1"
-                    android:backgroundTint="#303F9F"
-                    android:text="POI 저장"
-                    android:textColor="#FFFFFF"
-                    android:textSize="10.5sp" />
-
-                <Button
-                    android:id="@+id/btnParamSettings"
-                    android:layout_width="0dp"
-                    android:layout_height="38dp"
-                    android:layout_marginStart="3dp"
-                    android:layout_weight="1"
-                    android:backgroundTint="#F57C00"
-                    android:text="파라미터"
-                    android:textColor="#FFFFFF"
-                    android:textSize="10.5sp" />
-
-                <Button
-                    android:id="@+id/btnCancelNav"
-                    android:layout_width="0dp"
-                    android:layout_height="38dp"
-                    android:layout_marginStart="3dp"
-                    android:layout_weight="0.8"
-                    android:backgroundTint="#C62828"
-                    android:text="정지"
-                    android:textColor="#FFFFFF"
-                    android:textSize="10.5sp" />
-            </LinearLayout>
-
-            <!-- 챗봇 대화 로그창 -->
-            <ScrollView
-                android:id="@+id/svChatLog"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="0.9"
-                android:background="#151515"
-                android:padding="8dp">
-
-                <TextView
-                    android:id="@+id/tvChatLog"
+                <!-- 지도 상단 플로팅 툴바 (글자 잘림 없는 가로 스크롤 칩 바) -->
+                <HorizontalScrollView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:lineSpacingExtra="4dp"
-                    android:text="🤖 [터틀] 준비 완료! '헤이 터틀' 또는 음성/텍스트로 명령하세요.\n(예: '식탁으로 가줘', '주방으로 이동해')"
-                    android:textColor="#E0E0E0"
-                    android:textSize="13sp" />
-            </ScrollView>
+                    android:layout_alignParentTop="true"
+                    android:layout_margin="8dp"
+                    android:background="@android:color/transparent"
+                    android:overScrollMode="never"
+                    android:scrollbars="none">
 
-            <LinearLayout
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/btnModeInitialPose"
+                            android:layout_width="wrap_content"
+                            android:layout_height="36dp"
+                            android:backgroundTint="#00796B"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="10dp"
+                            android:text="📍 위치추정"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            app:cornerRadius="18dp" />
+
+                        <Button
+                            android:id="@+id/btnAddPoiMode"
+                            android:layout_width="wrap_content"
+                            android:layout_height="36dp"
+                            android:layout_marginStart="6dp"
+                            android:backgroundTint="#7B1FA2"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="10dp"
+                            android:text="🚩 POI 등록"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            app:cornerRadius="18dp" />
+
+                        <Button
+                            android:id="@+id/btnSavePoi"
+                            android:layout_width="wrap_content"
+                            android:layout_height="36dp"
+                            android:layout_marginStart="6dp"
+                            android:backgroundTint="#303F9F"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="10dp"
+                            android:text="💾 POI 저장"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            app:cornerRadius="18dp" />
+
+                        <Button
+                            android:id="@+id/btnParamSettings"
+                            android:layout_width="wrap_content"
+                            android:layout_height="36dp"
+                            android:layout_marginStart="6dp"
+                            android:backgroundTint="#E65100"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="10dp"
+                            android:text="⚙️ 파라미터"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            app:cornerRadius="18dp" />
+
+                        <Button
+                            android:id="@+id/btnCancelNav"
+                            android:layout_width="wrap_content"
+                            android:layout_height="36dp"
+                            android:layout_marginStart="6dp"
+                            android:backgroundTint="#C62828"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="10dp"
+                            android:text="🛑 주행취소"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            app:cornerRadius="18dp" />
+                    </LinearLayout>
+                </HorizontalScrollView>
+            </RelativeLayout>
+
+            <!-- 2. 하단 슬라이딩 AI 대화창 (BottomSheet) -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/bottomSheetChat"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:layout_height="380dp"
+                app:behavior_hideable="false"
+                app:behavior_peekHeight="125dp"
+                app:cardBackgroundColor="#1C1C1E"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="10dp"
+                app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior"
+                app:strokeColor="#333333"
+                app:strokeWidth="1dp">
 
-                <Button
-                    android:id="@+id/btnVoiceStt"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:backgroundTint="#FF6F00"
-                    android:padding="0dp"
-                    android:text="🎤"
-                    android:textColor="#FFFFFF"
-                    android:textSize="18sp" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="12dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp">
 
-                <EditText
-                    android:id="@+id/etUserChat"
-                    android:layout_width="0dp"
-                    android:layout_height="44dp"
-                    android:layout_marginStart="6dp"
-                    android:layout_weight="1"
-                    android:background="#2C2C2C"
-                    android:hint="명령어 입력 (예: 식탁으로 가줘)"
-                    android:paddingHorizontal="10dp"
-                    android:textColor="#FFFFFF"
-                    android:textColorHint="#757575"
-                    android:textSize="13sp" />
+                    <!-- 슬라이딩 핸들 바 (드래그 인디케이터) -->
+                    <View
+                        android:layout_width="40dp"
+                        android:layout_height="4dp"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginBottom="6dp"
+                        android:background="#555555" />
 
-                <Button
-                    android:id="@+id/btnSendChat"
-                    android:layout_width="wrap_content"
-                    android:layout_height="44dp"
-                    android:layout_marginStart="6dp"
-                    android:backgroundTint="#00C853"
-                    android:text="전송"
-                    android:textColor="#FFFFFF"
-                    android:textSize="12sp" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_horizontal"
+                        android:layout_marginBottom="6dp"
+                        android:text="💬 터틀 AI 어시스턴트 (위로 올려서 크게 보기)"
+                        android:textColor="#888888"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
 
-                <Button
-                    android:id="@+id/btnClearChat"
-                    android:layout_width="wrap_content"
-                    android:layout_height="44dp"
-                    android:layout_marginStart="4dp"
-                    android:backgroundTint="#424242"
-                    android:text="지우기"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11sp" />
-            </LinearLayout>
-        </LinearLayout>
+                    <!-- 스크롤 가능한 대화 기록 로그창 -->
+                    <ScrollView
+                        android:id="@+id/svChatLog"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:background="#121212"
+                        android:padding="8dp">
 
+                        <TextView
+                            android:id="@+id/tvChatLog"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:lineSpacingExtra="4dp"
+                            android:text="🤖 [터틀] 준비 완료! '헤이 터틀' 또는 음성/텍스트로 명령하세요.\n(예: '식탁으로 가줘', '주방으로 이동해')"
+                            android:textColor="#E0E0E0"
+                            android:textSize="13sp" />
+                    </ScrollView>
+
+                    <!-- 음성 인식 및 메시지 전송 바 -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <Button
+                            android:id="@+id/btnVoiceStt"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:backgroundTint="#FF6F00"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:padding="0dp"
+                            android:text="🎤"
+                            android:textColor="#FFFFFF"
+                            android:textSize="17sp"
+                            app:cornerRadius="20dp" />
+
+                        <EditText
+                            android:id="@+id/etUserChat"
+                            android:layout_width="0dp"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="6dp"
+                            android:layout_weight="1"
+                            android:background="@android:drawable/editbox_background_normal"
+                            android:backgroundTint="#2C2C2E"
+                            android:hint="명령어 입력 (예: 식탁 가자)"
+                            android:paddingHorizontal="10dp"
+                            android:textColor="#FFFFFF"
+                            android:textColorHint="#666666"
+                            android:textSize="12.5sp" />
+
+                        <Button
+                            android:id="@+id/btnSendChat"
+                            android:layout_width="wrap_content"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="4dp"
+                            android:backgroundTint="#00C853"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="12dp"
+                            android:text="전송"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            app:cornerRadius="8dp" />
+
+                        <Button
+                            android:id="@+id/btnClearChat"
+                            android:layout_width="wrap_content"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="4dp"
+                            android:backgroundTint="#424242"
+                            android:insetTop="0dp"
+                            android:insetBottom="0dp"
+                            android:minWidth="0dp"
+                            android:paddingHorizontal="10dp"
+                            android:text="지우기"
+                            android:textColor="#CCCCCC"
+                            android:textSize="11sp"
+                            app:cornerRadius="8dp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </androidx.coordinatorlayout.widget.CoordinatorLayout>
     </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

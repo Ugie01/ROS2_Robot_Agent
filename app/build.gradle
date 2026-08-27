@@ -2,14 +2,10 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
-// 1. local.properties 파일 읽기 로직 추가
-import java.util.Properties
-import java.io.FileInputStream
-
 Properties properties = new Properties()
 def localPropertiesFile = project.rootProject.file('local.properties')
 if (localPropertiesFile.exists()) {
-    properties.load(new FileInputStream(localPropertiesFile))
+    properties.load(localPropertiesFile.newDataInputStream())
 }
 
 android {
@@ -33,6 +29,12 @@ android {
         }
 
         buildConfigField "String", "GEMINI_API_KEY", "\"${properties.getProperty('GEMINI_API_KEY', '')}\""
+
+        // OLLAMA URL (local.properties에 없으면 기본 127.0.0.1 사용)
+        buildConfigField "String", "OLLAMA_URL", "\"${properties.getProperty('OLLAMA_URL', '')}\""
+
+        // PICOVOICE (키가 없으면 빈 문자열 "" 주입)
+        buildConfigField "String", "PICOVOICE_ACCESS_KEY", "\"${properties.getProperty('PICOVOICE_ACCESS_KEY', '')}\""
     }
 
     buildFeatures {
@@ -66,6 +68,12 @@ dependencies {
 
     // REST 통신용 OkHttp
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // JNA (Vosk가 C++ 기반이라 필요함)
+    implementation 'net.java.dev.jna:jna:5.18.1@aar'
+
+    // Vosk Android 라이브러리 (이 부분 스펠링 수정됨!)
+    implementation 'com.alphacephei:vosk-android:0.3.32@aar'
 
     testImplementation libs.junit
     androidTestImplementation libs.espresso.core

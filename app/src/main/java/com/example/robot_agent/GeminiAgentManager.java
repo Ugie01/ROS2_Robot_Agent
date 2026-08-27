@@ -21,19 +21,7 @@ import java.util.concurrent.Executors;
 
 public class GeminiAgentManager {
     private static final String TAG = "GeminiAgentManager";
-
-    // 구글 Gemini 공식 엔드포인트
-    private static final String GEMINI_API_URL =
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent";
-
-    private static final String[] CANDIDATE_ENDPOINTS = new String[]{
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent",
-            "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent"
-    };
-
-    private volatile String activeEndpoint = GEMINI_API_URL;
+    private static final String BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 
     public interface GeminiAgentListener {
         void onResponse(String textResponse);
@@ -47,6 +35,8 @@ public class GeminiAgentManager {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final List<JSONObject> chatHistory = new ArrayList<>();
+
+    private String verifiedModelName = null;
 
     public GeminiAgentManager(String rawApiKey, PoiManager poiManager, GeminiAgentListener listener) {
         this.apiKey = sanitizeApiKey(rawApiKey);
@@ -90,22 +80,20 @@ public class GeminiAgentManager {
                     chatHistory.add(userTurn);
                 }
 
-                executeGeminiRequestWithFallback();
+                // 1. 유효 모델 확인 후 요청 전송
+                ensureValidModelAndCall();
             } catch (Exception e) {
-                Log.e(TAG, "사용자 메시지 생성 예외", e);
+                Log.e(TAG, "사용자 메시지 생성 오류", e);
                 postError("메시지 생성 오류: " + e.getMessage());
             }
         });
     }
 
-    /**
-     * [중요 400 수정]: Gemini API는 함수 응답 시 role을 'user'로 지정해야 합니다.
-     */
     public void sendFunctionResult(String functionName, JSONObject functionResponseContent) {
         executor.execute(() -> {
             try {
                 JSONObject funcResponseTurn = new JSONObject();
-                funcResponseTurn.put("role", "user"); // role: "function" -> "user" 로 수정
+                funcResponseTurn.put("role", "function");
 
                 JSONArray parts = new JSONArray();
                 JSONObject part = new JSONObject();
@@ -121,7 +109,7 @@ public class GeminiAgentManager {
                     chatHistory.add(funcResponseTurn);
                 }
 
-                executeGeminiRequestWithFallback();
+                ensureValidModelAndCall();
             } catch (Exception e) {
                 Log.e(TAG, "함수 응답 처리 예외", e);
                 postError("함수 결과 처리 오류: " + e.getMessage());
@@ -129,36 +117,97 @@ public class GeminiAgentManager {
         });
     }
 
-    private void executeGeminiRequestWithFallback() {
-        if (tryCallApi(activeEndpoint)) return;
-
-        for (String endpoint : CANDIDATE_ENDPOINTS) {
-            if (endpoint.equals(activeEndpoint)) continue;
-            Log.d(TAG, "대체 엔드포인트 시도: " + endpoint);
-            if (tryCallApi(endpoint)) {
-                activeEndpoint = endpoint;
-                Log.d(TAG, "작동 엔드포인트 자동 전환 완료: " + activeEndpoint);
-                return;
+    /**
+     * Google ListModels API를 호출하여 해당 API Key로 사용 가능한 모델 자동 탐색
+     */
+    private void ensureValidModelAndCall() {
+        if (verifiedModelName == null) {
+            verifiedModelName = fetchAvailableModelFromGoogle();
+            if (verifiedModelName == null) {
+                // 기본 추천 모델 fallback
+                verifiedModelName = "models/gemini-3.6-flash";
             }
         }
+        executeGenerateContent(verifiedModelName);
     }
 
-    private boolean tryCallApi(String endpointUrl) {
+    private String fetchAvailableModelFromGoogle() {
         HttpURLConnection conn = null;
         try {
-            URL url = new URL(endpointUrl + "?key=" + apiKey);
+            URL url = new URL(BASE_URL + "/models?key=" + apiKey);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setRequestProperty("x-goog-api-key", apiKey);
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+
+            int code = conn.getResponseCode();
+            InputStream is = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
+
+            StringBuilder sb = new StringBuilder();
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+            }
+
+            if (code != 200) {
+                Log.e(TAG, "ListModels 실패 (Code " + code + "): " + sb.toString());
+                return null;
+            }
+
+            JSONObject root = new JSONObject(sb.toString());
+            JSONArray models = root.optJSONArray("models");
+            if (models != null) {
+                // Flash 모델 우선 탐색
+                for (int i = 0; i < models.length(); i++) {
+                    JSONObject m = models.getJSONObject(i);
+                    String name = m.getString("name"); // e.g. "models/gemini-2.5-flash"
+                    if (name.contains("gemini-3.6-flash")) {
+                        Log.d(TAG, "구글 API에서 탐색된 최적 모델: " + name);
+                        return name;
+                    }
+                }
+                for (int i = 0; i < models.length(); i++) {
+                    JSONObject m = models.getJSONObject(i);
+                    String name = m.getString("name");
+                    if (name.contains("flash") && !name.contains("image") && !name.contains("embedding")) {
+                        Log.d(TAG, "구글 API에서 탐색된 대체 모델: " + name);
+                        return name;
+                    }
+                }
+                // 없으면 첫 번째 지원 모델 반환
+                if (models.length() > 0) {
+                    return models.getJSONObject(0).getString("name");
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "모델 목록 조회 예외: " + e.getMessage());
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+        return null;
+    }
+
+    private void executeGenerateContent(String modelPath) {
+        HttpURLConnection conn = null;
+        try {
+            String cleanPath = modelPath.startsWith("models/") ? modelPath : "models/" + modelPath;
+            URL url = new URL(BASE_URL + "/" + cleanPath + ":generateContent?key=" + apiKey);
+
             conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             conn.setRequestProperty("Accept", "application/json");
+            conn.setRequestProperty("x-goog-api-key", apiKey);
             conn.setDoOutput(true);
             conn.setConnectTimeout(15000);
             conn.setReadTimeout(15000);
 
-            JSONObject requestPayload = buildRequestPayload();
+            JSONObject payload = buildRequestPayload();
 
             try (OutputStream os = conn.getOutputStream()) {
-                byte[] input = requestPayload.toString().getBytes(StandardCharsets.UTF_8);
+                byte[] input = payload.toString().getBytes(StandardCharsets.UTF_8);
                 os.write(input, 0, input.length);
             }
 
@@ -173,24 +222,18 @@ public class GeminiAgentManager {
                 }
             }
 
-            if (responseCode == HttpURLConnection.HTTP_NOT_FOUND) {
-                Log.w(TAG, "엔드포인트 404: " + endpointUrl);
-                return false;
-            }
-
             if (responseCode != HttpURLConnection.HTTP_OK) {
                 String errorDetail = responseBuilder.toString();
-                Log.e(TAG, "Gemini API 오류 (Code " + responseCode + "): " + errorDetail);
+                Log.e(TAG, "Gemini 요청 실패 (" + responseCode + "): " + errorDetail);
                 postError("Gemini 오류 (" + responseCode + "): " + extractErrorMessage(errorDetail));
-                return true;
+                return;
             }
 
             processGeminiResponse(responseBuilder.toString());
-            return true;
 
         } catch (Exception e) {
-            Log.e(TAG, "통신 오류: " + endpointUrl, e);
-            return false;
+            Log.e(TAG, "통신 예외", e);
+            postError("통신 중 오류: " + e.getMessage());
         } finally {
             if (conn != null) {
                 conn.disconnect();
@@ -214,14 +257,14 @@ public class GeminiAgentManager {
         JSONObject systemInstruction = new JSONObject();
         JSONArray sysParts = new JSONArray();
         JSONObject sysTextPart = new JSONObject();
-        sysTextPart.put("text", "당신은 자율주행 모바일 로봇의 지능형 비서 '터틀(Turtle)'입니다. " +
-                "사용자가 특정 목적지로 이동하라는 명령을 내리면 반드시 'navigate_to_poi' 함수를 호출하세요. " +
-                "일반 대화나 질문에는 한국어로 친절하고 간결하게 답변하세요.");
+        sysTextPart.put("text", "당신은 자율주행 모바일 로봇 비서 '터틀(Turtle)'입니다. " +
+                "사용자가 특정 목적지로 이동해달라고 하면 반드시 'navigate_to_poi' 함수를 호출하세요. " +
+                "그 외 일반 대화에는 한국어로 친절하고 간결하게 답변하세요.");
         sysParts.put(sysTextPart);
         systemInstruction.put("parts", sysParts);
         payload.put("systemInstruction", systemInstruction);
 
-        // 3. Tool / Function Declaration
+        // 3. Tool / Function Calling
         JSONArray tools = new JSONArray();
         JSONObject toolObj = new JSONObject();
         JSONArray functionDeclarations = new JSONArray();
@@ -236,7 +279,7 @@ public class GeminiAgentManager {
         JSONObject properties = new JSONObject();
         JSONObject targetNameProp = new JSONObject();
         targetNameProp.put("type", "STRING");
-        targetNameProp.put("description", "이동할 목적지 명칭 (예: 식탁, 주방, 거실 등)");
+        targetNameProp.put("description", "이동할 목적지 이름 (예: 식탁, 주방 등)");
 
         List<String> poiNames = poiManager.getPoiNames();
         if (!poiNames.isEmpty()) {
@@ -269,7 +312,7 @@ public class GeminiAgentManager {
             JSONObject root = new JSONObject(jsonStr);
             JSONArray candidates = root.optJSONArray("candidates");
             if (candidates == null || candidates.length() == 0) {
-                postError("Gemini로부터 유효한 응답을 받지 못했습니다.");
+                postError("Gemini로부터 응답을 받지 못했습니다.");
                 return;
             }
 

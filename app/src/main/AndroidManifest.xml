@@ -15,7 +15,11 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- [추가]: 핫워드 감지 시 백그라운드에서 앱을 최상단으로 띄우기 위한 필수 권한 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <application
+        android:usesCleartextTraffic="true"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -38,6 +42,7 @@
         <!-- 핫워드 상시 감지 포그라운드 서비스 -->
         <service
             android:name=".WakeWordService"
+            android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
