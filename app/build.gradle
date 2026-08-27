@@ -1,0 +1,73 @@
+plugins {
+    alias(libs.plugins.android.application)
+}
+
+// 1. local.properties 파일 읽기 로직 추가
+import java.util.Properties
+import java.io.FileInputStream
+
+Properties properties = new Properties()
+def localPropertiesFile = project.rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    properties.load(new FileInputStream(localPropertiesFile))
+}
+
+android {
+    namespace 'com.example.robot_agent'
+    compileSdk {
+        version = release(37)
+    }
+
+    defaultConfig {
+        applicationId "com.example.robot_agent"
+        minSdk 26
+        targetSdk 37
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        // DDS Native C++/JNI 바이너리 아키텍처 설정
+        ndk {
+            abiFilters "arm64-v8a", "armeabi-v7a", "x86_64"
+        }
+
+        buildConfigField "String", "GEMINI_API_KEY", "\"${properties.getProperty('GEMINI_API_KEY', '')}\""
+    }
+
+    buildFeatures {
+        buildConfig true // BuildConfig 활성화
+    }
+
+    buildTypes {
+        release {
+            optimization {
+                enable false
+            }
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+
+dependencies {
+    implementation libs.activity.ktx
+    implementation libs.appcompat
+    implementation libs.constraintlayout
+    implementation libs.material
+
+    // ROS 2 Native DDS 라이브러리 (Fast-DDS)
+    implementation 'us.ihmc:jros2-android:1.5.1'
+
+    // Picovoice Porcupine 온디바이스 핫워드 감지 엔진
+    implementation 'ai.picovoice:porcupine-android:3.0.2'
+
+    // REST 통신용 OkHttp
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    testImplementation libs.junit
+    androidTestImplementation libs.espresso.core
+    androidTestImplementation libs.ext.junit
+}
